@@ -118,7 +118,7 @@ class FalkorDBChatMessageHistory(BaseChatMessageHistory):
             )
         except Exception as e:
             if "already indexed" in str(e):
-                raise ValueError(f"{self._node_label} has already been indexed")
+                print(f"{self._node_label} has already been indexed")
 
     def _process_records(self, records: list) -> List[BaseMessage]:
         """Process the records from FalkorDB and convert them into BaseMessage objects.
