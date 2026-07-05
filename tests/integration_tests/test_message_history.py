@@ -25,6 +25,8 @@ def drop_session_graph(history: FalkorDBChatMessageHistory) -> None:
     try:
         history._database.delete()
     except Exception:
+        # Best-effort cleanup: the graph may never have been
+        # created server-side, which is fine.
         pass
 
 

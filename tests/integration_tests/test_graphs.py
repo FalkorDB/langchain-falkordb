@@ -31,6 +31,8 @@ def graph() -> Generator[FalkorDBGraph, None, None]:
         try:
             wrapper._graph.delete()
         except Exception:
+            # Best-effort cleanup: the graph may never have been
+            # created server-side, which is fine.
             pass
 
 
@@ -38,6 +40,26 @@ def test_query(graph: FalkorDBGraph) -> None:
     graph.query("CREATE (:Person {name: 'Alice', age: 30})")
     result = graph.query("MATCH (p:Person) RETURN p.name, p.age")
     assert result == [["Alice", 30]]
+
+
+def test_driver_kwargs_passthrough() -> None:
+    """Extra kwargs (e.g. timeouts) are forwarded to the FalkorDB client."""
+    wrapper = FalkorDBGraph(
+        "graph_kwargs_test",
+        host=host,
+        port=port,
+        socket_connect_timeout=5,
+        socket_timeout=30,
+    )
+    try:
+        assert wrapper.query("RETURN 1") == [[1]]
+    finally:
+        try:
+            wrapper._graph.delete()
+        except Exception:
+            # Best-effort cleanup: the graph may never have been
+            # created server-side, which is fine.
+            pass
 
 
 def test_query_params(graph: FalkorDBGraph) -> None:

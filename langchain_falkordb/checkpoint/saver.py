@@ -40,7 +40,7 @@ try:
     from langgraph.checkpoint.base import get_checkpoint_metadata
 except ImportError:  # pragma: no cover - older langgraph-checkpoint versions
 
-    def get_checkpoint_metadata(
+    def get_checkpoint_metadata(  # pylint: disable=unused-argument
         config: RunnableConfig, metadata: CheckpointMetadata
     ) -> CheckpointMetadata:
         return metadata

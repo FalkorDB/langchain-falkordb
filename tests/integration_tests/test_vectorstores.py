@@ -31,6 +31,8 @@ def drop_graph(store: FalkorDBVector) -> None:
     try:
         store._database.delete()
     except Exception:
+        # Best-effort cleanup: the graph may never have been
+        # created server-side, which is fine.
         pass
 
 
@@ -38,7 +40,9 @@ class TestFalkorDBStandard(ReadWriteTestSuite):
     """LangChain standard read/write test suite for FalkorDBVector."""
 
     @pytest.fixture()
-    def vectorstore(self) -> Generator[VectorStore, None, None]:  # type: ignore[override]
+    def vectorstore(  # type: ignore[override]
+        self,
+    ) -> Generator[VectorStore, None, None]:
         """Get an empty vectorstore backed by a fresh random graph."""
         store = FalkorDBVector(
             embedding=self.get_embeddings(),
@@ -280,6 +284,8 @@ def test_relationship_index_search() -> None:
         try:
             graph.delete()
         except Exception:
+            # Best-effort cleanup: the graph may never have been
+            # created server-side, which is fine.
             pass
 
 

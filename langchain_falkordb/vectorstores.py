@@ -696,7 +696,7 @@ class FalkorDBVector(VectorStore):
             for id_, text in zip(ids, texts)
         ]
 
-    def add_embeddings(
+    def add_embeddings(  # pylint: disable=unused-argument
         self,
         texts: Iterable[str],
         embeddings: List[List[float]],
@@ -942,9 +942,7 @@ class FalkorDBVector(VectorStore):
             **kwargs,
         )
 
-        embedding_dimension, index_type, entity_label, entity_property = (
-            store.retrieve_existing_node_index()
-        )
+        embedding_dimension, index_type, _, _ = store.retrieve_existing_node_index()
 
         if not index_type:
             raise ValueError(
@@ -1003,7 +1001,7 @@ class FalkorDBVector(VectorStore):
             **kwargs,
         )
 
-        embedding_dimension, index_type, entity_label, entity_property = (
+        embedding_dimension, index_type, _, _ = (
             store.retrieve_existing_relationship_index()
         )
 

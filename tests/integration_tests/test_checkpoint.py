@@ -40,6 +40,8 @@ def saver() -> Generator[FalkorDBSaver, None, None]:
         try:
             checkpointer._graph.delete()
         except Exception:
+            # Best-effort cleanup: the graph may never have been
+            # created server-side, which is fine.
             pass
 
 

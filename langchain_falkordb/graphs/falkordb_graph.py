@@ -18,7 +18,7 @@ RETURN {label:label, keys:keys} AS output
 
 REL_PROPERTIES_QUERY = """
 MATCH ()-[r]->()
-WITH keys(r) as keys, type(r) AS types
+WITH keys(r) as keys, [type(r)] AS types
 WITH CASE WHEN keys = [] THEN [NULL] ELSE keys END AS keys, types
 UNWIND types AS type
 UNWIND keys AS key WITH type,
@@ -30,7 +30,7 @@ REL_QUERY = """
 MATCH (n)-[r]->(m)
 UNWIND labels(n) as src_label
 UNWIND labels(m) as dst_label
-UNWIND type(r) as rel_type
+UNWIND [type(r)] as rel_type
 RETURN DISTINCT {start: src_label, type: rel_type, end: dst_label} AS output
 """
 
@@ -59,6 +59,9 @@ class FalkorDBGraph:
             ``FALKORDB_PASSWORD`` environment variable.
         ssl: Whether the connection should use SSL/TLS encryption.
             Defaults to ``False``.
+        kwargs: Additional keyword arguments forwarded to the
+            ``falkordb.FalkorDB`` client (and ultimately redis-py), e.g.
+            ``socket_timeout`` or ``socket_connect_timeout``.
 
     *Security note*: Make sure that the database connection uses credentials
         that are narrowly-scoped to only include necessary permissions.
@@ -81,6 +84,7 @@ class FalkorDBGraph:
         username: Optional[str] = None,
         password: Optional[str] = None,
         ssl: bool = False,
+        **kwargs: Any,
     ) -> None:
         """Create a new FalkorDB graph wrapper instance."""
         try:
@@ -98,6 +102,7 @@ class FalkorDBGraph:
                 username=username or os.environ.get("FALKORDB_USERNAME"),
                 password=password or os.environ.get("FALKORDB_PASSWORD"),
                 ssl=ssl,
+                **kwargs,
             )
         except Exception as e:
             raise ConnectionError(f"Failed to connect to FalkorDB: {e}") from e
