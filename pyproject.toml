@@ -1,16 +1,25 @@
-[tool.poetry]
+[project]
 name = "langchain-falkordb"
-version = "0.1.2"
-description = ""
-authors = ["kingtroga <trogaclassicman@gmail.com>"]
+version = "0.2.0"
+description = "An integration package connecting FalkorDB and LangChain"
+authors = [
+  { name = "FalkorDB", email = "info@falkordb.com" },
+  { name = "kingtroga", email = "trogaclassicman@gmail.com" },
+]
+license = "MIT"
+license-files = ["LICENSE"]
 readme = "README.md"
+requires-python = ">=3.9,<4.0"
+dependencies = [
+  "langchain-core>=0.3.21,<2.0.0",
+  "falkordb>=1.0.10,<2.0.0",
+  "numpy>=1.26.0,<3.0.0",
+]
 
-[tool.poetry.dependencies]
-python =  ">=3.9,<4.0"
-langchain-core = "^0.3.21"
-langchain-community = "^0.3.9"
-falkordb = "^1.0.10"
-
+[project.urls]
+Repository = "https://github.com/FalkorDB/langchain-falkordb"
+"Release Notes" = "https://github.com/FalkorDB/langchain-falkordb/releases"
+"Source Code" = "https://github.com/FalkorDB/langchain-falkordb"
 
 [tool.poetry.group.test.dependencies]
 pytest = "^8.3.4"
@@ -18,6 +27,31 @@ pytest-socket = "^0.7.0"
 pytest-asyncio = "^0.24.0"
 langchain-tests = "0.3.5"
 
+[tool.poetry.group.lint.dependencies]
+ruff = "^0.9.4"
+
+[tool.poetry.group.typing.dependencies]
+mypy = "^1.10"
+
+[tool.ruff]
+target-version = "py39"
+
+[tool.ruff.lint]
+select = [
+  "E", # pycodestyle
+  "F", # pyflakes
+  "I", # isort
+  "T201", # print
+]
+
+[tool.mypy]
+disallow_untyped_defs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
 [build-system]
-requires = ["poetry-core"]
+requires = ["poetry-core>=2.1"]
 build-backend = "poetry.core.masonry.api"
