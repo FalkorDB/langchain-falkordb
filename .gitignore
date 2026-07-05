@@ -13,3 +13,4 @@ build/
 .env
 .idea/
 .vscode/
+wordlist.dic
