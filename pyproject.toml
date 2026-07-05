@@ -16,6 +16,9 @@ dependencies = [
   "numpy>=1.26.0,<3.0.0",
 ]
 
+[project.optional-dependencies]
+langgraph = ["langgraph-checkpoint>=2.1.0,<5.0.0"]
+
 [project.urls]
 Repository = "https://github.com/FalkorDB/langchain-falkordb"
 "Release Notes" = "https://github.com/FalkorDB/langchain-falkordb/releases"
@@ -26,6 +29,8 @@ pytest = "^8.3.4"
 pytest-socket = "^0.7.0"
 pytest-asyncio = "^0.24.0"
 langchain-tests = "0.3.5"
+langgraph-checkpoint = ">=2.1.0,<3.0.0"
+langgraph = ">=0.6.0,<0.7.0"
 
 [tool.poetry.group.lint.dependencies]
 ruff = "^0.9.4"
