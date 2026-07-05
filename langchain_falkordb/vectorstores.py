@@ -357,6 +357,18 @@ class FalkorDBVector(VectorStore):
             )
         if not node_label:
             raise ValueError("The `node_label` must not be None or empty string")
+        # These values are interpolated into Cypher inside backtick-quoted
+        # identifiers; an embedded backtick would escape the identifier.
+        for parameter_name, parameter_value in (
+            ("node_label", node_label),
+            ("relation_type", relation_type),
+            ("embedding_node_property", embedding_node_property),
+            ("text_node_property", text_node_property),
+        ):
+            if "`" in parameter_value:
+                raise ValueError(
+                    f"`{parameter_name}` must not contain backtick characters"
+                )
 
         if graph is not None:
             # Reuse the connection of a FalkorDBGraph-like object.

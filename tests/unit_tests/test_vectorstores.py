@@ -1,8 +1,12 @@
 """Unit tests for pure helpers in langchain_falkordb.vectorstores."""
 
+from typing import List
+
 import pytest
+from langchain_core.embeddings import Embeddings
 
 from langchain_falkordb.vectorstores import (
+    FalkorDBVector,
     IndexType,
     SearchType,
     _get_search_index_query,
@@ -10,6 +14,31 @@ from langchain_falkordb.vectorstores import (
     dict_to_yaml_str,
     process_index_data,
 )
+
+
+class NoopEmbeddings(Embeddings):
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        return [[0.0] for _ in texts]
+
+    def embed_query(self, text: str) -> List[float]:
+        return [0.0]
+
+
+class TestIdentifierValidation:
+    """Backticks in identifiers would escape the quoted Cypher identifier."""
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"node_label": "Chunk`) DELETE (n"},
+            {"relation_type": "LINKS`) DELETE (n"},
+            {"embedding_node_property": "embedding`) DELETE (n"},
+            {"text_node_property": "text`) DELETE (n"},
+        ],
+    )
+    def test_backtick_rejected(self, kwargs: dict) -> None:
+        with pytest.raises(ValueError, match="backtick"):
+            FalkorDBVector(embedding=NoopEmbeddings(), **kwargs)
 
 
 class TestConstructMetadataFilter:

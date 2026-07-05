@@ -81,6 +81,10 @@ class FalkorDBChatMessageHistory(BaseChatMessageHistory):
 
         if not session_id:
             raise ValueError("Please ensure that the session_id parameter is provided.")
+        # node_label is interpolated into Cypher inside backtick-quoted
+        # identifiers; an embedded backtick would escape the identifier.
+        if "`" in node_label:
+            raise ValueError("`node_label` must not contain backtick characters")
 
         if graph is not None:
             # Reuse the connection of a FalkorDBGraph-like object.
