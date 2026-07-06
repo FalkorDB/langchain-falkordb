@@ -10,21 +10,21 @@ database with native vector and full-text indexing.
 
 It provides:
 
+- **`FalkorDBGraph`** — a graph wrapper with schema introspection and
+  `GraphDocument` ingestion, for building knowledge graphs.
 - **`FalkorDBVector`** — a LangChain
   [vector store](https://python.langchain.com/docs/concepts/vectorstores/)
   backed by FalkorDB vector indexes, with support for metadata filtering,
   maximal marginal relevance (MMR) search, and hybrid (vector + full-text)
   search.
-- **`FalkorDBGraph`** — a graph wrapper with schema introspection and
-  `GraphDocument` ingestion, for building knowledge graphs.
 - **`FalkorDBQAChain`** — a natural-language-to-Cypher question-answering
   chain over a FalkorDB graph.
-- **`FalkorDBChatMessageHistory`** — a LangChain
-  [chat message history](https://python.langchain.com/docs/concepts/chat_history/)
-  that persists conversations in FalkorDB.
 - **`FalkorDBSaver`** — a [LangGraph](https://github.com/langchain-ai/langgraph)
   checkpointer that persists agent state in FalkorDB
   (`pip install langchain-falkordb[langgraph]`).
+- **`FalkorDBChatMessageHistory`** — a LangChain
+  [chat message history](https://python.langchain.com/docs/concepts/chat_history/)
+  that persists conversations in FalkorDB.
 
 ## Installation
 
@@ -39,6 +39,41 @@ docker run -p 6379:6379 -it --rm falkordb/falkordb:latest
 ```
 
 or use a free [FalkorDB Cloud](https://app.falkordb.cloud/) instance.
+
+## Graph wrapper
+
+`FalkorDBGraph` gives you direct Cypher access with schema introspection,
+and ingests `GraphDocument` objects (e.g. produced by an LLM graph
+transformer):
+
+```python
+from langchain_core.documents import Document
+from langchain_falkordb import FalkorDBGraph
+from langchain_falkordb.graphs import GraphDocument, Node, Relationship
+
+graph = FalkorDBGraph("movies", host="localhost", port=6379)
+
+tom = Node(id="Tom Hanks", type="Actor")
+gump = Node(id="Forrest Gump", type="Movie")
+graph.add_graph_documents(
+    [
+        GraphDocument(
+            nodes=[tom, gump],
+            relationships=[Relationship(source=tom, target=gump, type="ACTED_IN")],
+            source=Document(page_content="Tom Hanks acted in Forrest Gump."),
+        )
+    ],
+    include_source=True,  # links entities to their source Document node
+)
+
+graph.refresh_schema()
+print(graph.get_schema)
+print(graph.query("MATCH (a:Actor)-[:ACTED_IN]->(m:Movie) RETURN a.id, m.id"))
+```
+
+It also works with `LLMGraphTransformer` from `langchain-experimental` to
+build knowledge graphs from unstructured text: pass the transformer's
+`GraphDocument` output straight to `add_graph_documents`.
 
 ## Vector store
 
@@ -137,41 +172,6 @@ store = FalkorDBVector.from_existing_graph(
     text_node_properties=["title", "content"],
 )
 ```
-
-## Graph wrapper
-
-`FalkorDBGraph` gives you direct Cypher access with schema introspection,
-and ingests `GraphDocument` objects (e.g. produced by an LLM graph
-transformer):
-
-```python
-from langchain_core.documents import Document
-from langchain_falkordb import FalkorDBGraph
-from langchain_falkordb.graphs import GraphDocument, Node, Relationship
-
-graph = FalkorDBGraph("movies", host="localhost", port=6379)
-
-tom = Node(id="Tom Hanks", type="Actor")
-gump = Node(id="Forrest Gump", type="Movie")
-graph.add_graph_documents(
-    [
-        GraphDocument(
-            nodes=[tom, gump],
-            relationships=[Relationship(source=tom, target=gump, type="ACTED_IN")],
-            source=Document(page_content="Tom Hanks acted in Forrest Gump."),
-        )
-    ],
-    include_source=True,  # links entities to their source Document node
-)
-
-graph.refresh_schema()
-print(graph.get_schema)
-print(graph.query("MATCH (a:Actor)-[:ACTED_IN]->(m:Movie) RETURN a.id, m.id"))
-```
-
-It also works with `LLMGraphTransformer` from `langchain-experimental` to
-build knowledge graphs from unstructured text: pass the transformer's
-`GraphDocument` output straight to `add_graph_documents`.
 
 ## Question answering over a graph
 
