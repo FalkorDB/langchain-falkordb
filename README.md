@@ -1,8 +1,13 @@
-# langchain-falkordb
-
 [![PyPI version](https://img.shields.io/pypi/v/langchain-falkordb.svg)](https://pypi.org/project/langchain-falkordb/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![CI](https://github.com/FalkorDB/langchain-falkordb/actions/workflows/ci.yml/badge.svg)](https://github.com/FalkorDB/langchain-falkordb/actions/workflows/ci.yml)
+[![Codecov](https://codecov.io/gh/falkordb/langchain-falkordb/branch/main/graph/badge.svg)](https://codecov.io/gh/falkordb/langchain-falkordb)
+[![Forum](https://img.shields.io/badge/Forum-falkordb-blue)](https://github.com/orgs/FalkorDB/discussions)
+[![Discord](https://img.shields.io/discord/1146782921294884966?style=flat-square)](https://discord.gg/6M4QwDXn2w)
+
+# langchain-falkordb
+
+[![Try Free](https://img.shields.io/badge/Try%20Free-FalkorDB%20Cloud-FF8101?labelColor=FDE900&style=for-the-badge&link=https://app.falkordb.cloud)](https://app.falkordb.cloud)
 
 This package contains the [LangChain](https://github.com/langchain-ai/langchain)
 integration for [FalkorDB](https://www.falkordb.com/), a low-latency graph
