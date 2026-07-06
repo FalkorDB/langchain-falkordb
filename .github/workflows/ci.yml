@@ -61,7 +61,15 @@ jobs:
         run: poetry install --with test
 
       - name: Run unit tests
-        run: poetry run pytest tests/unit_tests --disable-socket -q
+        run: poetry run pytest tests/unit_tests --disable-socket -q --cov=langchain_falkordb --cov-report=xml
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
+        if: matrix.python-version == '3.11'
+        with:
+          flags: unit
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   integration-tests:
     runs-on: ubuntu-latest
@@ -91,7 +99,14 @@ jobs:
         run: poetry install --with test
 
       - name: Run integration tests
-        run: poetry run pytest tests/integration_tests -q
+        run: poetry run pytest tests/integration_tests -q --cov=langchain_falkordb --cov-report=xml
         env:
           FALKORDB_HOST: localhost
           FALKORDB_PORT: "6379"
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
+        with:
+          flags: integration
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
