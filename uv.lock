@@ -452,6 +452,7 @@ dependencies = [
 
 [package.optional-dependencies]
 langgraph = [
+    { name = "langgraph" },
     { name = "langgraph-checkpoint" },
 ]
 
@@ -470,6 +471,7 @@ dev = [
 requires-dist = [
     { name = "falkordb", specifier = ">=1.0.10,<2.0.0" },
     { name = "langchain-core", specifier = ">=0.3.21,<2.0.0" },
+    { name = "langgraph", marker = "extra == 'langgraph'", specifier = ">=0.6.0,<2.0.0" },
     { name = "langgraph-checkpoint", marker = "extra == 'langgraph'", specifier = ">=2.1.0,<5.0.0" },
     { name = "numpy", specifier = ">=1.26.0,<3.0.0" },
 ]

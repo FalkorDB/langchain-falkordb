@@ -17,7 +17,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-langgraph = ["langgraph-checkpoint>=2.1.0,<5.0.0"]
+langgraph = [
+  "langgraph>=0.6.0,<2.0.0",
+  "langgraph-checkpoint>=2.1.0,<5.0.0",
+]
 
 # PEP 735 group used by the Pylint workflow (uv sync installs it by default);
 # it mirrors the poetry test/lint groups closely enough for import analysis.
