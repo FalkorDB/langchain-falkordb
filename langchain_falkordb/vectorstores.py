@@ -455,13 +455,21 @@ class FalkorDBVector(VectorStore):
             raise
 
     def retrieve_existing_node_index(
-        self, node_label: Optional[str] = ""
+        self,
+        node_label: Optional[str] = "",
+        embedding_node_property: Optional[str] = "",
     ) -> Tuple[Optional[int], Optional[str], Optional[str], Optional[str]]:
-        """Check if a node vector index exists in the FalkorDB database.
+        """Check if a matching node vector index exists in the database.
+
+        The index must match both the node label and the embedding
+        property; an index on the same label but a different property does
+        not count, since searches would then target the wrong property.
 
         Args:
             node_label: Node label to look for. Defaults to the label the
                 store was configured with.
+            embedding_node_property: Indexed property to look for. Defaults
+                to the embedding property the store was configured with.
 
         Returns:
             A tuple of the embedding dimension, the entity type, the entity
@@ -469,6 +477,9 @@ class FalkorDBVector(VectorStore):
             ``(None, None, None, None)`` if no matching index exists.
         """
         node_label = node_label or self.node_label
+        embedding_node_property = (
+            embedding_node_property or self.embedding_node_property
+        )
         if not node_label:
             raise ValueError("`node_label` property must be set to use this function")
 
@@ -479,6 +490,7 @@ class FalkorDBVector(VectorStore):
         for index in process_index_data(index_information.result_set):
             if (
                 index.get("entity_label") == node_label
+                and index.get("entity_property") == embedding_node_property
                 and index.get("entity_type") == "NODE"
                 and index.get("index_type") == "VECTOR"
                 and index.get("index_dimension") is not None
@@ -493,13 +505,21 @@ class FalkorDBVector(VectorStore):
         return None, None, None, None
 
     def retrieve_existing_relationship_index(
-        self, relation_type: Optional[str] = ""
+        self,
+        relation_type: Optional[str] = "",
+        embedding_node_property: Optional[str] = "",
     ) -> Tuple[Optional[int], Optional[str], Optional[str], Optional[str]]:
-        """Check if a relationship vector index exists in the database.
+        """Check if a matching relationship vector index exists.
+
+        The index must match both the relationship type and the embedding
+        property; an index on the same type but a different property does
+        not count, since searches would then target the wrong property.
 
         Args:
             relation_type: Relationship type to look for. Defaults to the
                 relation type the store was configured with.
+            embedding_node_property: Indexed property to look for. Defaults
+                to the embedding property the store was configured with.
 
         Returns:
             A tuple of the embedding dimension, the entity type, the entity
@@ -507,6 +527,9 @@ class FalkorDBVector(VectorStore):
             ``(None, None, None, None)`` if no matching index exists.
         """
         relation_type = relation_type or self.relation_type
+        embedding_node_property = (
+            embedding_node_property or self.embedding_node_property
+        )
         if not relation_type:
             raise ValueError(
                 "Couldn't find any specified `relation_type`. "
@@ -520,6 +543,7 @@ class FalkorDBVector(VectorStore):
         for index in process_index_data(index_information.result_set):
             if (
                 index.get("entity_label") == relation_type
+                and index.get("entity_property") == embedding_node_property
                 and index.get("entity_type") == "RELATIONSHIP"
                 and index.get("index_type") == "VECTOR"
                 and index.get("index_dimension") is not None

@@ -128,6 +128,32 @@ def test_add_graph_documents_include_source(graph: FalkorDBGraph) -> None:
     assert mentions == [["FalkorDB is fast.", "FalkorDB"]]
 
 
+def test_add_graph_documents_id_property_not_clobbered(graph: FalkorDBGraph) -> None:
+    """A user `id` property must not overwrite the internal node id."""
+    alice = Node(id="alice", type="Person", properties={"id": "evil", "name": "Al"})
+    bob = Node(id="bob", type="Person")
+    document = GraphDocument(
+        nodes=[alice, bob],
+        relationships=[Relationship(source=alice, target=bob, type="KNOWS")],
+        source=Document(
+            page_content="Alice knows Bob.",
+            metadata={"id": "evil-doc", "text": "evil-text", "lang": "en"},
+        ),
+    )
+    graph.add_graph_documents([document], include_source=True)
+
+    # The internal id survives, so the relationship endpoints resolve.
+    rels = graph.query(
+        "MATCH (a:Person {id: 'alice'})-[:KNOWS]->(b:Person {id: 'bob'}) "
+        "RETURN a.name, b.id"
+    )
+    assert rels == [["Al", "bob"]]
+
+    # The source Document node keeps its internal id and text.
+    docs = graph.query("MATCH (d:Document)-[:MENTIONS]->() RETURN DISTINCT d.text")
+    assert docs == [["Alice knows Bob."]]
+
+
 def test_add_graph_documents_rejects_backtick_labels(graph: FalkorDBGraph) -> None:
     bad = Node(id="x", type="Bad`) DELETE (n")
     document = GraphDocument(nodes=[bad], relationships=[], source=None)

@@ -178,11 +178,13 @@ class FalkorDBGraph:
                 )
 
             # Import nodes. Ids and properties are passed as parameters,
-            # never interpolated into the query.
+            # never interpolated into the query. The internal id is re-set
+            # after the property merge so user properties can't clobber it.
             for node in document.nodes:
                 label = _validated_label(node.type)
                 self.query(
-                    f"MERGE (n:`{label}` {{id: $id}}) SET n += $properties",
+                    f"MERGE (n:`{label}` {{id: $id}}) "
+                    "SET n += $properties SET n.id = $id",
                     {"id": node.id, "properties": node.properties or {}},
                 )
 
@@ -211,7 +213,7 @@ class FalkorDBGraph:
                 )
                 self.query(
                     "MERGE (d:Document {id: $id}) "
-                    "SET d.text = $text SET d += $metadata",
+                    "SET d += $metadata SET d.text = $text, d.id = $id",
                     {
                         "id": source_id,
                         "text": source.page_content,

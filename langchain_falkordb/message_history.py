@@ -215,6 +215,10 @@ class FalkorDBChatMessageHistory(BaseChatMessageHistory):
             "CREATE (new:Message {type: $type, content: $content, data: $data}) "
             "WITH s, new "
             "OPTIONAL MATCH (s)-[lm:LAST_MESSAGE]->(last_message:Message) "
+            # The previous LAST_MESSAGE pointer moves to the new message;
+            # without the DELETE, stale pointers accumulate and corrupt the
+            # message chain.
+            "DELETE lm "
             "FOREACH (_ IN CASE WHEN last_message IS NULL THEN [] ELSE [1] END | "
             "  MERGE (last_message)-[:NEXT]->(new)) "
             "MERGE (s)-[:LAST_MESSAGE]->(new) "

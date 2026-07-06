@@ -396,6 +396,57 @@ def test_from_existing_graph_embeds_and_searches() -> None:
             pass
 
 
+def test_two_stores_different_embedding_properties_same_label() -> None:
+    """Index validation must match on the embedding property, not just the
+    label, so two stores can index different properties of one label."""
+    database = "multi_property_test"
+    store_one = FalkorDBVector.from_texts(
+        texts=["apple"],
+        embedding=FixedVectorEmbeddings(),
+        host=host,
+        port=port,
+        database=database,
+    )
+    try:
+        store_two = FalkorDBVector(
+            embedding=FixedVectorEmbeddings(),
+            host=host,
+            port=port,
+            database=database,
+            embedding_node_property="other_embedding",
+        )
+        store_two.add_texts(["banana"], ids=["b1"])
+        output = store_two.similarity_search("banana", k=1)
+        assert [doc.page_content for doc in output] == ["banana"]
+    finally:
+        drop_graph(store_one)
+
+
+def test_from_existing_index_wrong_property_raises() -> None:
+    """Connecting to an index that exists on a different property must fail
+    clearly instead of querying the wrong property."""
+    database = "wrong_property_test"
+    original = FalkorDBVector.from_texts(
+        texts=["apple"],
+        embedding=FixedVectorEmbeddings(),
+        host=host,
+        port=port,
+        database=database,
+    )
+    try:
+        with pytest.raises(ValueError, match="does not exist"):
+            FalkorDBVector.from_existing_index(
+                embedding=FixedVectorEmbeddings(),
+                node_label="Chunk",
+                host=host,
+                port=port,
+                database=database,
+                embedding_node_property="nonexistent_property",
+            )
+    finally:
+        drop_graph(original)
+
+
 def test_delete_scoped_to_store_label(store: FalkorDBVector) -> None:
     """delete() without ids must clear the store, not unrelated nodes."""
     store.add_texts(["apple"])

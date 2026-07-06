@@ -179,6 +179,46 @@ def test_legacy_message_nodes_still_readable() -> None:
         drop_session_graph(history)
 
 
+def test_single_last_message_edge_and_linear_chain() -> None:
+    """Each add must move the LAST_MESSAGE pointer, not accumulate edges."""
+    history = FalkorDBChatMessageHistory("last_msg_edge_test", host=host, port=port)
+    try:
+        history.clear()
+        for i in range(4):
+            history.add_user_message(f"message {i}")
+
+        last_message_edges = history._database.query(
+            "MATCH (:Session)-[lm:LAST_MESSAGE]->() RETURN count(lm)"
+        ).result_set
+        assert last_message_edges == [[1]]
+
+        # The chain must be linear: no message has more than one outgoing
+        # NEXT edge.
+        fanout = history._database.query(
+            "MATCH (m:Message)-[:NEXT]->(n:Message) "
+            "WITH m, count(n) AS outgoing RETURN max(outgoing)"
+        ).result_set
+        assert fanout == [[1]]
+    finally:
+        drop_session_graph(history)
+
+
+def test_window_returns_most_recent_messages() -> None:
+    """Histories longer than the window return the most recent messages."""
+    history = FalkorDBChatMessageHistory("window_test", host=host, port=port, window=3)
+    try:
+        history.clear()
+        for i in range(10):
+            history.add_user_message(f"message {i}")
+
+        messages = history.messages
+        # window=3 traverses NEXT*0..6, i.e. up to 7 messages.
+        assert len(messages) == 7
+        assert [m.content for m in messages] == [f"message {i}" for i in range(3, 10)]
+    finally:
+        drop_session_graph(history)
+
+
 def test_add_messages_graph_object() -> None:
     """Basic testing: Passing driver through a graph-like object."""
     driver = FalkorDB(host=host, port=port)
