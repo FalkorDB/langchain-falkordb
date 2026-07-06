@@ -1,23 +1,120 @@
-[tool.poetry]
+[project]
 name = "langchain-falkordb"
-version = "0.1.2"
-description = ""
-authors = ["kingtroga <trogaclassicman@gmail.com>"]
+version = "0.2.0"
+description = "An integration package connecting FalkorDB and LangChain"
+authors = [
+  { name = "FalkorDB", email = "info@falkordb.com" },
+  { name = "kingtroga", email = "trogaclassicman@gmail.com" },
+]
+license = "MIT"
+license-files = ["LICENSE"]
 readme = "README.md"
+requires-python = ">=3.10,<4.0"
+dependencies = [
+  "langchain-core>=0.3.21,<2.0.0",
+  "falkordb>=1.0.10,<2.0.0",
+  "numpy>=1.26.0,<3.0.0",
+]
 
-[tool.poetry.dependencies]
-python =  ">=3.9,<4.0"
-langchain-core = "^0.3.21"
-langchain-community = "^0.3.9"
-falkordb = "^1.0.10"
+[project.optional-dependencies]
+langgraph = [
+  "langgraph>=0.6.0,<2.0.0",
+  "langgraph-checkpoint>=2.1.0,<5.0.0",
+]
 
+# PEP 735 group used by the Pylint workflow (uv sync installs it by default);
+# it mirrors the poetry test/lint groups closely enough for import analysis.
+[dependency-groups]
+dev = [
+  "pylint>=3.3,<4.0",
+  "pytest>=8.3.4,<9.0.0",
+  "pytest-asyncio>=0.24.0,<0.25.0",
+  "pytest-socket>=0.7.0,<0.8.0",
+  "langchain-tests==0.3.5",
+  "langgraph>=0.6.0,<0.7.0",
+  "langgraph-checkpoint>=2.1.0,<3.0.0",
+]
+
+[project.urls]
+Repository = "https://github.com/FalkorDB/langchain-falkordb"
+"Release Notes" = "https://github.com/FalkorDB/langchain-falkordb/releases"
+"Source Code" = "https://github.com/FalkorDB/langchain-falkordb"
 
 [tool.poetry.group.test.dependencies]
 pytest = "^8.3.4"
 pytest-socket = "^0.7.0"
 pytest-asyncio = "^0.24.0"
 langchain-tests = "0.3.5"
+langgraph-checkpoint = ">=2.1.0,<3.0.0"
+langgraph = ">=0.6.0,<0.7.0"
+
+[tool.poetry.group.lint.dependencies]
+ruff = "^0.9.4"
+
+[tool.poetry.group.typing.dependencies]
+mypy = "^1.10"
+
+[tool.ruff]
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+  "E", # pycodestyle
+  "F", # pyflakes
+  "I", # isort
+  "T201", # print
+]
+
+[tool.mypy]
+disallow_untyped_defs = true
+ignore_missing_imports = true
+
+[tool.pylint.main]
+py-version = "3.10"
+
+[tool.pylint.format]
+max-line-length = 88
+
+[tool.pylint."messages control"]
+disable = [
+  # Docstring style is not enforced via pylint; public APIs are documented.
+  "missing-function-docstring",
+  "missing-class-docstring",
+  # Pytest fixtures are injected as arguments shadowing the fixture name.
+  "redefined-outer-name",
+  # Optional/lazy imports (falkordb, langgraph) are deliberate.
+  "import-outside-toplevel",
+  # `filter`/`input`/`id` are part of the established LangChain API surface.
+  "redefined-builtin",
+  # Signatures mirror the LangChain base classes; design metrics don't apply.
+  "too-many-arguments",
+  "too-many-positional-arguments",
+  "too-many-locals",
+  "too-many-branches",
+  "too-many-instance-attributes",
+  "too-many-public-methods",
+  "too-many-lines",
+  "too-few-public-methods",
+  # Overrides add optional keyword parameters; mypy checks base compatibility.
+  "arguments-differ",
+  # Broad catches are deliberate (best-effort cleanup, error-text matching).
+  "broad-exception-caught",
+  # Tests intentionally reach into private connection attributes.
+  "protected-access",
+  # Import-guard and connection boilerplate repeats across modules by design.
+  "duplicate-code",
+  # test_checkpoint.py imports after pytest.importorskip by necessity.
+  "wrong-import-position",
+  # Mathematical variable names (X, Y) in the vendored MMR utilities.
+  "invalid-name",
+  # Explicit `== []` assertions in tests check type and emptiness.
+  "use-implicit-booleaness-not-comparison",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 
 [build-system]
-requires = ["poetry-core"]
+requires = ["poetry-core>=2.2.0"]
 build-backend = "poetry.core.masonry.api"

@@ -1,44 +1,55 @@
+"""FalkorDB chat message history integration for LangChain."""
+
+import json
+import logging
 import os
-from typing import List, Optional, Union
+from typing import Any, List, Optional, Union
 
 from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_core.messages import (
     AIMessage,
     BaseMessage,
     HumanMessage,
+    SystemMessage,
+    message_to_dict,
+    messages_from_dict,
 )
 
-from langchain_community.graphs import FalkorDBGraph
+logger = logging.getLogger(__name__)
 
 
 class FalkorDBChatMessageHistory(BaseChatMessageHistory):
-    """Chat message history stored in a Falkor database.
+    """Chat message history stored in a FalkorDB database.
 
-    This class handles storing and retrieving chat messages in a FalkorDB database.
-    It creates a session and stores messages in a message chain, maintaining a link
-    between subsequent messages.
+    This class handles storing and retrieving chat messages in a FalkorDB
+    database. It creates a session and stores messages in a message chain,
+    maintaining a link between subsequent messages.
 
     Args:
-        session_id (Union[str, int]): The session ID for storing and retrieving messages
-                                also the name of the database.
-        username (Optional[str]): Username for authenticating with FalkorDB.
-        password (Optional[str]): Password for authenticating with FalkorDB.
-        host (str): Host where the FalkorDB is running. Defaults to 'localhost'.
-        port (int): Port number where the FalkorDB is running. Defaults to 6379.
-        node_label (str): Label for the session node
-                        in the graph. Defaults to "Session".
-        window (int): The number of messages to retrieve when querying
-                        the history. Defaults to 3.
-        ssl (bool): Whether to use SSL for connecting
-                    to the database. Defaults to False.
-        graph (Optional[FalkorDBGraph]): Optionally provide an existing
-                    FalkorDBGraph object for connecting.
+        session_id: The session ID for storing and retrieving messages,
+            also the name of the graph the messages are stored in.
+        username: Username for authenticating with FalkorDB. Falls back to
+            the ``FALKORDB_USERNAME`` environment variable.
+        password: Password for authenticating with FalkorDB. Falls back to
+            the ``FALKORDB_PASSWORD`` environment variable.
+        host: Host where FalkorDB is running. Defaults to ``"localhost"``.
+        port: Port number where FalkorDB is running. Defaults to ``6379``.
+        node_label: Label for the session node in the graph.
+            Defaults to ``"Session"``.
+        window: The number of message pairs to retrieve when querying the
+            history. Defaults to 3.
+        ssl: Whether to use SSL for connecting to the database.
+            Defaults to ``False``.
+        graph: Optional graph object to reuse an existing connection. Any
+            object exposing a ``_driver`` attribute holding a
+            ``falkordb.FalkorDB`` client is accepted, e.g. a
+            ``FalkorDBGraph`` instance from ``langchain-community``.
 
     Example:
         .. code-block:: python
-            from langchain_community.chat_message_histories import (
-            FalkorDBChatMessageHistory
-            )
+
+            from langchain_core.messages import HumanMessage
+            from langchain_falkordb import FalkorDBChatMessageHistory
 
             history = FalkorDBChatMessageHistory(
                 session_id="1234",
@@ -59,25 +70,25 @@ class FalkorDBChatMessageHistory(BaseChatMessageHistory):
         window: int = 3,
         ssl: bool = False,
         *,
-        graph: Optional[FalkorDBGraph] = None,
+        graph: Optional[Any] = None,
     ) -> None:
-        """
-        Initialize the FalkorDBChatMessageHistory
-        class with the session and connection details.
-        """
         try:
             import falkordb
-        except ImportError:
+        except ImportError as e:
             raise ImportError(
-                "Could not import falkordb python package."
+                "Could not import falkordb python package. "
                 "Please install it with `pip install falkordb`."
-            )
+            ) from e
 
         if not session_id:
             raise ValueError("Please ensure that the session_id parameter is provided.")
+        # node_label is interpolated into Cypher inside backtick-quoted
+        # identifiers; an embedded backtick would escape the identifier.
+        if "`" in node_label:
+            raise ValueError("`node_label` must not contain backtick characters")
 
-        if graph:
-            self._database = graph._graph
+        if graph is not None:
+            # Reuse the connection of a FalkorDBGraph-like object.
             self._driver = graph._driver
         else:
             self._host = host
@@ -96,59 +107,60 @@ class FalkorDBChatMessageHistory(BaseChatMessageHistory):
                 )
             except Exception as e:
                 raise ValueError(
-                    f"Error: {e}"
                     "Could not connect to FalkorDB database. "
-                    "Please ensure that the host, port,"
-                    " username, and password are correct."
-                )
+                    "Please ensure that the host, port, "
+                    "username, and password are correct."
+                ) from e
 
-        self._database = self._driver.select_graph(session_id)
+        self._database = self._driver.select_graph(str(session_id))
         self._session_id = session_id
         self._node_label = node_label
         self._window = window
 
         self._database.query(
-            f"MERGE (s:{self._node_label} {{id:$session_id}})",
+            f"MERGE (s:`{self._node_label}` {{id: $session_id}})",
             {"session_id": self._session_id},
         )
 
         try:
-            self._database.create_node_vector_index(
-                f"{self._node_label}", "id", dim=5, similarity_function="cosine"
-            )
+            self._database.create_node_range_index(self._node_label, "id")
         except Exception as e:
-            if "already indexed" in str(e):
-                raise ValueError(f"{self._node_label} has already been indexed")
+            # Re-connecting to an existing session is expected; the index
+            # then already exists.
+            if "already indexed" not in str(e).lower():
+                raise
 
     def _process_records(self, records: list) -> List[BaseMessage]:
-        """Process the records from FalkorDB and convert them into BaseMessage objects.
+        """Convert FalkorDB records into ``BaseMessage`` objects.
+
+        Messages written by current versions carry the full serialized
+        message in the ``data`` column and are restored losslessly
+        (including tool calls and metadata). Messages written by older
+        versions only have ``type`` and ``content``.
 
         Args:
-            records (list): The raw records fetched from the FalkorDB query.
+            records: The raw records fetched from the FalkorDB query, one
+                ``[type, content, data]`` row per message.
 
         Returns:
-            List[BaseMessage]: A list of `BaseMessage` objects.
+            The corresponding list of ``BaseMessage`` objects.
         """
-        # Explicitly set messages as a list of BaseMessage
         messages: List[BaseMessage] = []
 
         for record in records:
-            content = record[0].get("data", {}).get("content", "")
-            message_type = record[0].get("type", "").lower()
+            message_type, content, data = record[0], record[1], record[2]
+            if data:
+                messages.extend(messages_from_dict([json.loads(data)]))
+                continue
 
-            # Append the correct message type to the list
+            message_type = (message_type or "").lower()
+            content = content or ""
             if message_type == "human":
-                messages.append(
-                    HumanMessage(
-                        content=content, additional_kwargs={}, response_metadata={}
-                    )
-                )
+                messages.append(HumanMessage(content=content))
             elif message_type == "ai":
-                messages.append(
-                    AIMessage(
-                        content=content, additional_kwargs={}, response_metadata={}
-                    )
-                )
+                messages.append(AIMessage(content=content))
+            elif message_type == "system":
+                messages.append(SystemMessage(content=content))
             else:
                 raise ValueError(f"Unknown message type: {message_type}")
 
@@ -159,24 +171,24 @@ class FalkorDBChatMessageHistory(BaseChatMessageHistory):
         """Retrieve the messages from FalkorDB for the session.
 
         Returns:
-            List[BaseMessage]: A list of messages in the current session.
+            The messages in the current session.
         """
         query = (
-            f"MATCH (s:{self._node_label})-[:LAST_MESSAGE]->(last_message) "
+            f"MATCH (s:`{self._node_label}`)-[:LAST_MESSAGE]->(last_message) "
             "MATCH p=(last_message)<-[:NEXT*0.."
-            f"{self._window*2}]-() WITH p, length(p) AS length "
+            f"{self._window * 2}]-() WITH p, length(p) AS length "
             "ORDER BY length DESC LIMIT 1 UNWIND reverse(nodes(p)) AS node "
-            "RETURN {data:{content: node.content}, type:node.type} AS result"
+            "RETURN node.type AS type, node.content AS content, "
+            "node.data AS data"
         )
 
         records = self._database.query(query).result_set
 
-        messages = self._process_records(records)
-        return messages
+        return self._process_records(records)
 
     @messages.setter
     def messages(self, messages: List[BaseMessage]) -> None:
-        """Block direct assignment to 'messages' to prevent misuse."""
+        """Block direct assignment to ``messages`` to prevent misuse."""
         raise NotImplementedError(
             "Direct assignment to 'messages' is not allowed."
             " Use the 'add_message' method instead."
@@ -185,14 +197,28 @@ class FalkorDBChatMessageHistory(BaseChatMessageHistory):
     def add_message(self, message: BaseMessage) -> None:
         """Append a message to the session in FalkorDB.
 
+        The full message (including tool calls and metadata) is serialized
+        into the ``data`` property; ``type`` and ``content`` are stored
+        alongside for readability and backwards compatibility.
+
         Args:
-            message (BaseMessage): The message object to add to the session.
+            message: The message object to add to the session. Any LangChain
+                message type is supported.
         """
+        content = (
+            message.content
+            if isinstance(message.content, str)
+            else json.dumps(message.content)
+        )
         create_query = (
-            f"MATCH (s:{self._node_label}) "
-            "CREATE (new:Message {type: $type, content: $content}) "
+            f"MATCH (s:`{self._node_label}`) "
+            "CREATE (new:Message {type: $type, content: $content, data: $data}) "
             "WITH s, new "
             "OPTIONAL MATCH (s)-[lm:LAST_MESSAGE]->(last_message:Message) "
+            # The previous LAST_MESSAGE pointer moves to the new message;
+            # without the DELETE, stale pointers accumulate and corrupt the
+            # message chain.
+            "DELETE lm "
             "FOREACH (_ IN CASE WHEN last_message IS NULL THEN [] ELSE [1] END | "
             "  MERGE (last_message)-[:NEXT]->(new)) "
             "MERGE (s)-[:LAST_MESSAGE]->(new) "
@@ -202,20 +228,19 @@ class FalkorDBChatMessageHistory(BaseChatMessageHistory):
             create_query,
             {
                 "type": message.type,
-                "content": message.content,
+                "content": content,
+                "data": json.dumps(message_to_dict(message)),
             },
         )
 
     def clear(self) -> None:
         """Clear all messages from the session in FalkorDB.
 
-        Deletes all messages linked to the session and resets the message history.
-
-        Raises:
-            ValueError: If there is an issue with the query or the session.
+        Deletes all messages linked to the session and resets the message
+        history.
         """
         query = (
-            f"MATCH (s:{self._node_label})-[:LAST_MESSAGE|NEXT*0..]->(m:Message) "
+            f"MATCH (s:`{self._node_label}`)-[:LAST_MESSAGE|NEXT*0..]->(m:Message) "
             "WITH m DELETE m"
         )
         self._database.query(query)
