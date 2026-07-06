@@ -40,6 +40,23 @@ class TestIdentifierValidation:
         with pytest.raises(ValueError, match="backtick"):
             FalkorDBVector(embedding=NoopEmbeddings(), **kwargs)
 
+    @pytest.mark.parametrize(
+        "bad_property",
+        ["bad`prop", "bad'prop", 'bad"prop', "bad\\prop"],
+    )
+    def test_from_existing_graph_rejects_unsafe_properties(
+        self, bad_property: str
+    ) -> None:
+        """Text property names are interpolated into Cypher and must be safe."""
+        with pytest.raises(ValueError, match="text_node_properties"):
+            FalkorDBVector.from_existing_graph(
+                embedding=NoopEmbeddings(),
+                database="db",
+                node_label="Node",
+                embedding_node_property="embedding",
+                text_node_properties=[bad_property],
+            )
+
 
 class TestConstructMetadataFilter:
     def test_empty_filter(self) -> None:

@@ -732,6 +732,8 @@ class FalkorDBVector(VectorStore):
             metadatas = [{} for _ in texts]
         if len(metadatas) != len(texts):
             raise ValueError("The number of metadatas must match the number of texts.")
+        if len(embeddings) != len(texts):
+            raise ValueError("The number of embeddings must match the number of texts.")
 
         rows = []
         for text, metadata, embedding, id_ in zip(
@@ -778,6 +780,13 @@ class FalkorDBVector(VectorStore):
             texts=texts, embeddings=embeddings, metadatas=metadatas, ids=ids, **kwargs
         )
 
+    def _require_node_store(self, operation: str) -> None:
+        """Raise for node-scoped operations on relationship-backed stores."""
+        if self._index_type == IndexType.RELATIONSHIP:
+            raise ValueError(
+                f"{operation} is not supported with relationship vector index"
+            )
+
     def get_by_ids(self, ids: Sequence[str], /) -> List[Document]:
         """Get documents by their ids.
 
@@ -788,6 +797,7 @@ class FalkorDBVector(VectorStore):
             The found documents, in the same order as the requested ids.
             Missing ids are skipped.
         """
+        self._require_node_store("get_by_ids")
         rows = self._query(
             f"MATCH (n:`{self.node_label}`) "
             f"WHERE n.`{DOC_ID_PROPERTY}` IN $ids "
@@ -819,6 +829,7 @@ class FalkorDBVector(VectorStore):
         Returns:
             ``True`` on success.
         """
+        self._require_node_store("delete")
         if ids is None:
             self._query(f"MATCH (n:`{self.node_label}`) DELETE n")
             return True
@@ -838,13 +849,15 @@ class FalkorDBVector(VectorStore):
     ) -> None:
         """Update an existing document in the store by id.
 
-        The new content is re-embedded so that similarity search reflects
-        the update.
+        The stored text, embedding and metadata are fully replaced with the
+        new document's content (same semantics as re-adding it by id), so
+        removed metadata keys do not linger.
 
         Args:
             document_id: The id of the document to update.
             document: The new document content and metadata.
         """
+        self._require_node_store("update_documents")
         existing_document = self._query(
             f"MATCH (n:`{self.node_label}`) "
             f"WHERE n.`{DOC_ID_PROPERTY}` = $document_id "
@@ -854,22 +867,11 @@ class FalkorDBVector(VectorStore):
         if not existing_document:
             raise ValueError(f"Document with id {document_id} not found in the store.")
 
-        embedding = self.embedding.embed_documents([document.page_content])[0]
-        update_query = (
-            f"MATCH (n:`{self.node_label}`) "
-            f"WHERE n.`{DOC_ID_PROPERTY}` = $document_id "
-            f"SET n.`{self.text_node_property}` = $new_content, "
-            f"n.`{self.embedding_node_property}` = vecf32($embedding)"
+        self.add_texts(
+            [document.page_content],
+            metadatas=[document.metadata],
+            ids=[document_id],
         )
-        params: Dict[str, Any] = {
-            "document_id": document_id,
-            "new_content": document.page_content,
-            "embedding": embedding,
-        }
-        if document.metadata:
-            update_query += ", n += $metadata"
-            params["metadata"] = document.metadata
-        self._query(update_query, params=params)
 
     @classmethod
     def from_texts(
@@ -1076,6 +1078,15 @@ class FalkorDBVector(VectorStore):
             raise ValueError(
                 "Parameter `text_node_properties` must not be an empty list"
             )
+        # The property names are interpolated into backtick-quoted Cypher
+        # identifiers and a Cypher list literal, so quoting characters would
+        # break out of those contexts.
+        for text_property in text_node_properties:
+            if not text_property or any(char in text_property for char in "`'\"\\"):
+                raise ValueError(
+                    "`text_node_properties` must not contain backtick, "
+                    "quote or backslash characters"
+                )
 
         # Prefer retrieval query from params, otherwise construct it
         if not retrieval_query:

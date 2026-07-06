@@ -6,13 +6,13 @@ These tests require a running FalkorDB instance. By default they connect to
 
 import os
 
-import pytest
 from falkordb import FalkorDB
 from langchain_core.messages import (
     AIMessage,
     FunctionMessage,
     HumanMessage,
     SystemMessage,
+    ToolMessage,
 )
 
 from langchain_falkordb.message_history import FalkorDBChatMessageHistory
@@ -112,15 +112,69 @@ def test_system_message_roundtrip() -> None:
         drop_session_graph(history)
 
 
-def test_unsupported_message_type_raises_on_add() -> None:
-    """Unsupported message types must fail on write, not corrupt the session."""
-    history = FalkorDBChatMessageHistory("unsupported_msg_test", host=host, port=port)
+def test_tool_call_messages_roundtrip() -> None:
+    """AIMessage tool calls and metadata must survive storage."""
+    history = FalkorDBChatMessageHistory("tool_call_test", host=host, port=port)
     try:
         history.clear()
-        with pytest.raises(ValueError, match="message type"):
-            history.add_message(FunctionMessage(name="f", content="x"))
-        # The session must still be readable.
-        assert history.messages == []
+        ai_message = AIMessage(
+            content="",
+            tool_calls=[
+                {
+                    "name": "get_weather",
+                    "args": {"city": "Tel Aviv"},
+                    "id": "call_1",
+                    "type": "tool_call",
+                }
+            ],
+            additional_kwargs={"custom": "value"},
+        )
+        history.add_message(HumanMessage(content="What's the weather?"))
+        history.add_message(ai_message)
+        history.add_message(ToolMessage(content="Sunny, 28C", tool_call_id="call_1"))
+
+        messages = history.messages
+        assert len(messages) == 3
+        assert isinstance(messages[1], AIMessage)
+        assert messages[1].tool_calls == ai_message.tool_calls
+        assert messages[1].additional_kwargs == {"custom": "value"}
+        assert isinstance(messages[2], ToolMessage)
+        assert messages[2].tool_call_id == "call_1"
+    finally:
+        drop_session_graph(history)
+
+
+def test_function_message_roundtrip() -> None:
+    """All LangChain message types are supported via full serialization."""
+    history = FalkorDBChatMessageHistory("function_msg_test", host=host, port=port)
+    try:
+        history.clear()
+        history.add_message(FunctionMessage(name="f", content="result"))
+        messages = history.messages
+        assert len(messages) == 1
+        assert isinstance(messages[0], FunctionMessage)
+        assert messages[0].name == "f"
+        assert messages[0].content == "result"
+    finally:
+        drop_session_graph(history)
+
+
+def test_legacy_message_nodes_still_readable() -> None:
+    """Messages stored by older versions (type/content only) must load."""
+    history = FalkorDBChatMessageHistory("legacy_format_test", host=host, port=port)
+    try:
+        history.clear()
+        # Simulate a message chain written by a pre-0.2 version: no `data`
+        # property, only type and content.
+        history._database.query(
+            "MATCH (s:Session) "
+            "CREATE (m:Message {type: 'human', content: 'old message'}) "
+            "MERGE (s)-[:LAST_MESSAGE]->(m)"
+        )
+        messages = history.messages
+        assert len(messages) == 1
+        assert isinstance(messages[0], HumanMessage)
+        assert messages[0].content == "old message"
     finally:
         drop_session_graph(history)
 

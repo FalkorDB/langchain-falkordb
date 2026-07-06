@@ -1,5 +1,6 @@
 """FalkorDB chat message history integration for LangChain."""
 
+import json
 import logging
 import os
 from typing import Any, List, Optional, Union
@@ -10,11 +11,11 @@ from langchain_core.messages import (
     BaseMessage,
     HumanMessage,
     SystemMessage,
+    message_to_dict,
+    messages_from_dict,
 )
 
 logger = logging.getLogger(__name__)
-
-_SUPPORTED_MESSAGE_TYPES = ("human", "ai", "system")
 
 
 class FalkorDBChatMessageHistory(BaseChatMessageHistory):
@@ -132,8 +133,14 @@ class FalkorDBChatMessageHistory(BaseChatMessageHistory):
     def _process_records(self, records: list) -> List[BaseMessage]:
         """Convert FalkorDB records into ``BaseMessage`` objects.
 
+        Messages written by current versions carry the full serialized
+        message in the ``data`` column and are restored losslessly
+        (including tool calls and metadata). Messages written by older
+        versions only have ``type`` and ``content``.
+
         Args:
-            records: The raw records fetched from the FalkorDB query.
+            records: The raw records fetched from the FalkorDB query, one
+                ``[type, content, data]`` row per message.
 
         Returns:
             The corresponding list of ``BaseMessage`` objects.
@@ -141,9 +148,13 @@ class FalkorDBChatMessageHistory(BaseChatMessageHistory):
         messages: List[BaseMessage] = []
 
         for record in records:
-            content = record[0].get("data", {}).get("content", "")
-            message_type = record[0].get("type", "").lower()
+            message_type, content, data = record[0], record[1], record[2]
+            if data:
+                messages.extend(messages_from_dict([json.loads(data)]))
+                continue
 
+            message_type = (message_type or "").lower()
+            content = content or ""
             if message_type == "human":
                 messages.append(HumanMessage(content=content))
             elif message_type == "ai":
@@ -167,7 +178,8 @@ class FalkorDBChatMessageHistory(BaseChatMessageHistory):
             "MATCH p=(last_message)<-[:NEXT*0.."
             f"{self._window * 2}]-() WITH p, length(p) AS length "
             "ORDER BY length DESC LIMIT 1 UNWIND reverse(nodes(p)) AS node "
-            "RETURN {data:{content: node.content}, type:node.type} AS result"
+            "RETURN node.type AS type, node.content AS content, "
+            "node.data AS data"
         )
 
         records = self._database.query(query).result_set
@@ -185,18 +197,22 @@ class FalkorDBChatMessageHistory(BaseChatMessageHistory):
     def add_message(self, message: BaseMessage) -> None:
         """Append a message to the session in FalkorDB.
 
+        The full message (including tool calls and metadata) is serialized
+        into the ``data`` property; ``type`` and ``content`` are stored
+        alongside for readability and backwards compatibility.
+
         Args:
-            message: The message object to add to the session. Must be a
-                human, AI, or system message.
+            message: The message object to add to the session. Any LangChain
+                message type is supported.
         """
-        if message.type not in _SUPPORTED_MESSAGE_TYPES:
-            raise ValueError(
-                f"Unsupported message type: {message.type!r}. Supported "
-                f"message types are: {', '.join(_SUPPORTED_MESSAGE_TYPES)}"
-            )
+        content = (
+            message.content
+            if isinstance(message.content, str)
+            else json.dumps(message.content)
+        )
         create_query = (
             f"MATCH (s:`{self._node_label}`) "
-            "CREATE (new:Message {type: $type, content: $content}) "
+            "CREATE (new:Message {type: $type, content: $content, data: $data}) "
             "WITH s, new "
             "OPTIONAL MATCH (s)-[lm:LAST_MESSAGE]->(last_message:Message) "
             "FOREACH (_ IN CASE WHEN last_message IS NULL THEN [] ELSE [1] END | "
@@ -208,7 +224,8 @@ class FalkorDBChatMessageHistory(BaseChatMessageHistory):
             create_query,
             {
                 "type": message.type,
-                "content": message.content,
+                "content": content,
+                "data": json.dumps(message_to_dict(message)),
             },
         )
 

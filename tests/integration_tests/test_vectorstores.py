@@ -289,6 +289,113 @@ def test_relationship_index_search() -> None:
             pass
 
 
+def test_relationship_store_rejects_node_operations() -> None:
+    """Node-scoped operations must raise on relationship-backed stores."""
+    driver = FalkorDB(host=host, port=port)
+    graph = driver.select_graph("rel_ops_test")
+    try:
+        graph.create_edge_vector_index(
+            "LINKS", "embedding", dim=4, similarity_function="cosine"
+        )
+        graph.query(
+            "CREATE (:A)-[:LINKS {text:'apple', "
+            "embedding: vecf32([1.0,0.0,0.0,0.0])}]->(:B)"
+        )
+        vectorstore = FalkorDBVector.from_existing_relationship_index(
+            embedding=FixedVectorEmbeddings(),
+            relation_type="LINKS",
+            host=host,
+            port=port,
+            database="rel_ops_test",
+        )
+        with pytest.raises(ValueError, match="relationship"):
+            vectorstore.delete(["some-id"])
+        with pytest.raises(ValueError, match="relationship"):
+            vectorstore.delete()
+        with pytest.raises(ValueError, match="relationship"):
+            vectorstore.get_by_ids(["some-id"])
+        with pytest.raises(ValueError, match="relationship"):
+            from langchain_core.documents import Document
+
+            vectorstore.update_documents("some-id", Document(page_content="x"))
+        # The unrelated :A/:B nodes must be untouched.
+        assert graph.query("MATCH (n) RETURN count(n)").result_set == [[2]]
+    finally:
+        try:
+            graph.delete()
+        except Exception:
+            # Best-effort cleanup: the graph may never have been
+            # created server-side, which is fine.
+            pass
+
+
+def test_update_documents_replaces_metadata(store: FalkorDBVector) -> None:
+    """Updating a document must replace its metadata, not merge it."""
+    from langchain_core.documents import Document
+
+    store.add_texts(
+        ["apple"], metadatas=[{"kind": "fruit", "extra": "stale"}], ids=["doc1"]
+    )
+    store.update_documents(
+        "doc1", Document(page_content="orange", metadata={"kind": "citrus"})
+    )
+    document = store.get_by_ids(["doc1"])[0]
+    assert document.page_content == "orange"
+    assert document.metadata == {"kind": "citrus"}  # "extra" must be gone
+
+
+def test_add_embeddings_length_mismatch_raises(store: FalkorDBVector) -> None:
+    """Mismatched texts/embeddings lengths must raise, not silently drop."""
+    with pytest.raises(ValueError, match="number of embeddings"):
+        store.add_embeddings(
+            texts=["apple", "banana"], embeddings=[[1.0, 0.0, 0.0, 0.0]]
+        )
+
+
+def test_from_existing_graph_embeds_and_searches() -> None:
+    """from_existing_graph embeds text properties of existing nodes."""
+    driver = FalkorDB(host=host, port=port)
+    graph = driver.select_graph("existing_graph_test")
+    try:
+        graph.query(
+            "CREATE (:Article {title: 'apple', body: 'about apples', year: 2020})"
+        )
+        graph.query(
+            "CREATE (:Article {title: 'banana', body: 'about bananas', year: 2021})"
+        )
+
+        class TitleEmbeddings(FixedVectorEmbeddings):
+            def embed_documents(self, texts: "List[str]") -> "List[List[float]]":
+                # from_existing_graph embeds combined property strings like
+                # "\ntitle: apple\nbody: ...", so match on containment.
+                return [
+                    next(vector for key, vector in self.vectors.items() if key in text)
+                    for text in texts
+                ]
+
+        vectorstore = FalkorDBVector.from_existing_graph(
+            embedding=TitleEmbeddings(),
+            database="existing_graph_test",
+            node_label="Article",
+            embedding_node_property="embedding",
+            text_node_properties=["title", "body"],
+        )
+        output = vectorstore.similarity_search("banana", k=1)
+        assert len(output) == 1
+        assert "banana" in output[0].page_content
+        # Text properties and the embedding are excluded from metadata by
+        # design (they are already part of page_content); other node
+        # properties come through.
+        assert output[0].metadata == {"year": 2021}
+    finally:
+        try:
+            graph.delete()
+        except Exception:
+            # Best-effort cleanup: the graph may never have been
+            # created server-side, which is fine.
+            pass
+
+
 def test_delete_scoped_to_store_label(store: FalkorDBVector) -> None:
     """delete() without ids must clear the store, not unrelated nodes."""
     store.add_texts(["apple"])
