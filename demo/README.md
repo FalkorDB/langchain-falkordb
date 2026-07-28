@@ -8,7 +8,8 @@ integration.
 1. Install dependencies:
 
    ```bash
-   pip install -e .
+   cd demo
+   poetry install
    ```
 
 2. Start FalkorDB (for example with Docker):
@@ -20,11 +21,11 @@ integration.
 3. Run the demo:
 
    ```bash
-   python demo/basic_usage.py
+   poetry run python basic_usage.py
    ```
 
 Optional flags:
 
 ```bash
-python demo/basic_usage.py --host localhost --port 6379 --database langchain_falkordb_demo
+poetry run python basic_usage.py --host localhost --port 6379 --database langchain_falkordb_demo
 ```
