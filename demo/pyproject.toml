@@ -7,13 +7,5 @@ dependencies = [
   "langchain-falkordb",
 ]
 
-[tool.poetry]
-package-mode = false
-
-[tool.poetry.dependencies]
-python = ">=3.10,<4.0"
-langchain-falkordb = { path = "..", develop = true }
-
-[build-system]
-requires = ["poetry-core>=2.2.0"]
-build-backend = "poetry.core.masonry.api"
+[tool.uv.sources]
+langchain-falkordb = { path = "..", editable = true }

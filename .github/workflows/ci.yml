@@ -122,13 +122,13 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install Poetry
-        run: pipx install poetry
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
 
       - name: Install demo dependencies
-        run: poetry install
+        run: uv sync
         working-directory: demo
 
       - name: Run demo smoke test
-        run: poetry run python basic_usage.py --help
+        run: uv run python basic_usage.py --help
         working-directory: demo
