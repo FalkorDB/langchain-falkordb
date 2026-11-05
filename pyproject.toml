@@ -40,6 +40,10 @@ Repository = "https://github.com/FalkorDB/langchain-falkordb"
 "Release Notes" = "https://github.com/FalkorDB/langchain-falkordb/releases"
 "Source Code" = "https://github.com/FalkorDB/langchain-falkordb"
 
+[tool.poetry]
+packages = [{ include = "langchain_falkordb" }]
+exclude = ["demo/**"]
+
 [tool.poetry.group.test.dependencies]
 pytest = "^8.3.4"
 pytest-socket = "^0.7.0"
